@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Спич-Радар // AI Speech Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: { fontFamily: { sans: ['Onest', 'system-ui', 'sans-serif'], display: ['Unbounded', 'Onest', 'sans-serif'] } } } };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+<style>
+  html { font-size: clamp(15px, 0.6vw + 8px, 22px); }
+  body {
+    font-family: 'Onest', system-ui, sans-serif;
+    color: #e2e8f0;
+    background:
+      radial-gradient(1100px 600px at 12% -10%, rgba(16,185,129,.12), transparent 60%),
+      radial-gradient(900px 520px at 100% 0%, rgba(56,189,248,.09), transparent 55%),
+      #020617;
+    min-height: 100vh;
+  }
+  .font-display { font-family: 'Unbounded', 'Onest', sans-serif; }
+  :focus-visible { outline: 2px solid #34d399; outline-offset: 2px; }
+
+  .glass {
+    background: rgba(30, 41, 59, .6);
+    border: 1px solid rgba(148, 163, 184, .15);
+    border-radius: 1.25rem;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 18px 50px -28px rgba(0,0,0,.8);
+  }
+
+  /* Tones */
+  .tone-green { --c:#34d399; --bg:rgba(52,211,153,.13); --bd:rgba(52,211,153,.42); }
+  .tone-blue  { --c:#38bdf8; --bg:rgba(56,189,248,.13); --bd:rgba(56,189,248,.42); }
+  .tone-amber { --c:#fbbf24; --bg:rgba(251,191,36,.13); --bd:rgba(251,191,36,.42); }
+  .tone-red   { --c:#fb7185; --bg:rgba(251,113,133,.14); --bd:rgba(251,113,133,.5); }
+  .tone-idle  { --c:#94a3b8; --bg:rgba(148,163,184,.10); --bd:rgba(148,163,184,.22); }
+
+  .metric { border-color: var(--bd); transition: border-color .5s, box-shadow .5s; }
+  .metric:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 0 0 1px var(--bd), 0 18px 50px -28px rgba(0,0,0,.8); }
+  .big {
+    font-family: 'Unbounded', sans-serif; font-weight: 700; line-height: 1;
+    font-size: clamp(2.75rem, 4.2vw, 5rem); letter-spacing: -.03em;
+    color: var(--c); transition: color .4s; font-variant-numeric: tabular-nums;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: .4rem; width: fit-content;
+    color: var(--c); background: var(--bg); border: 1px solid var(--bd);
+    border-radius: 999px; padding: .3rem .9rem; font-weight: 600; font-size: 1rem;
+    transition: color .4s, background .4s, border-color .4s;
+  }
+
+  @keyframes pulseRed {
+    0%   { box-shadow: 0 0 0 0 rgba(251,113,133,.75); background-color: rgba(225,29,72,.42); border-color: #fb7185; }
+    100% { box-shadow: 0 0 0 30px rgba(251,113,133,0); background-color: rgba(30,41,59,.6); }
+  }
+  .pulse-red { animation: pulseRed .95s ease-out; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .55rem;
+    border-radius: .9rem; padding: .7rem 1.2rem; font-weight: 700; transition: background .2s, transform .1s, border-color .2s, opacity .2s;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn-primary { background: #10b981; color: #022c22; }
+  .btn-primary:hover:not(:disabled) { background: #34d399; }
+  .btn-warn { background: rgba(251,191,36,.14); color: #fcd34d; border-color: rgba(251,191,36,.45); }
+  .btn-warn:hover:not(:disabled) { background: rgba(251,191,36,.24); }
+  .btn-ghost { background: rgba(148,163,184,.08); color: #cbd5e1; border-color: rgba(148,163,184,.25); }
+  .btn-ghost:hover:not(:disabled) { background: rgba(148,163,184,.16); }
+
+  .seg { display: inline-flex; gap: .2rem; padding: .25rem; border-radius: 1rem; background: rgba(2,6,23,.6); border: 1px solid rgba(148,163,184,.16); }
+  .seg button { padding: .55rem 1rem; border-radius: .75rem; font-weight: 600; color: #94a3b8; display: inline-flex; align-items: center; gap: .5rem; transition: background .2s, color .2s; }
+  .seg button:hover { color: #e2e8f0; }
+  .seg button[aria-pressed="true"] { background: rgba(16,185,129,.18); color: #6ee7b7; box-shadow: inset 0 0 0 1px rgba(52,211,153,.45); }
+
+  /* Logo radar */
+  .radar { width: 3rem; height: 3rem; border-radius: 50%; position: relative; flex: none;
+    border: 1.5px solid rgba(52,211,153,.65);
+    background: radial-gradient(circle, #34d399 0 2px, transparent 3px),
+                repeating-radial-gradient(circle, transparent 0 .4rem, rgba(52,211,153,.28) .4rem calc(.4rem + 1px)); }
+  .radar::after { content: ''; position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(from 0deg, rgba(52,211,153,.7), rgba(52,211,153,0) 65%);
+    animation: spin 6s linear infinite; }
+  .radar.active::after { animation-duration: 1.8s; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Tabs */
+  .tab { padding: .85rem 1.15rem; font-weight: 600; color: #94a3b8; border-bottom: 2px solid transparent; display: inline-flex; align-items: center; gap: .5rem; transition: color .2s, border-color .2s; margin-bottom: -1px; }
+  .tab:hover { color: #e2e8f0; }
+  .tab[aria-selected="true"] { color: #6ee7b7; border-bottom-color: #34d399; }
+
+  /* Transcript */
+  .scroll-area { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #334155 transparent; }
+  #transcript { font-size: 1.65rem; line-height: 1.75; color: #f1f5f9; }
+  #interimText { color: #94a3b8; }
+  .para {
+    display: inline-block; padding: 0 .45rem; margin: 0 .1rem; border-radius: .55rem; font-weight: 700; line-height: 1.45;
+    background: rgba(244,63,94,.24); color: #ffe4e6; border: 1px solid rgba(251,113,133,.85);
+    box-shadow: 0 0 16px rgba(244,63,94,.5); animation: popIn .35s ease-out;
+  }
+  .para.pending { border-style: dashed; box-shadow: none; animation: none; background: rgba(244,63,94,.14); color: #fecdd3; }
+  @keyframes popIn { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  .chip { display: inline-flex; align-items: center; gap: .35rem; padding: .35rem .45rem .35rem 1rem; border-radius: 999px; background: rgba(244,63,94,.12); border: 1px solid rgba(251,113,133,.42); color: #fecdd3; font-weight: 600; font-size: 1.1rem; }
+  .chip button { display: inline-flex; width: 1.7rem; height: 1.7rem; align-items: center; justify-content: center; border-radius: 999px; color: #fda4af; }
+  .chip button:hover { background: rgba(244,63,94,.35); color: #fff; }
+
+  .field { width: 100%; background: rgba(2,6,23,.6); border: 1px solid rgba(148,163,184,.25); border-radius: .9rem; padding: .75rem 1rem; color: #f1f5f9; font-size: 1.05rem; }
+  .field::placeholder { color: #64748b; }
+  .field:focus { outline: none; border-color: #34d399; box-shadow: 0 0 0 3px rgba(52,211,153,.2); }
+  input[type="range"] { accent-color: #34d399; }
+
+  .sw { color: #e2e8f0; transition: color .35s; border-radius: .3rem; }
+  .sw.read { color: #475569; }
+  .sw.cur { color: #052e16; background: #34d399; box-shadow: 0 0 0 .15rem #34d399; }
+
+  .bar-track { height: 1rem; background: rgba(148,163,184,.12); border-radius: 999px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #e11d48, #fb7185); transition: width .9s cubic-bezier(.2,.8,.2,1); width: 0; }
+
+  .tip { display: flex; gap: 1rem; padding: 1rem 1.1rem; border-radius: 1rem; background: var(--bg); border: 1px solid var(--bd); }
+  .tip svg { color: var(--c); flex: none; }
+  .tip h4 { color: var(--c); font-weight: 700; }
+
+  .ring-bg { stroke: rgba(148,163,184,.15); }
+  .ring-fg { transition: stroke-dashoffset 1.4s cubic-bezier(.2,.8,.2,1), stroke .4s; }
+
+  #toasts { position: fixed; right: 1rem; bottom: 1rem; z-index: 80; display: flex; flex-direction: column; gap: .5rem; align-items: flex-end; }
+  .toast { padding: .75rem 1.1rem; border-radius: .9rem; font-weight: 600; background: rgba(15,23,42,.95); border: 1px solid var(--bd); color: var(--c); animation: popIn .25s ease-out; box-shadow: 0 10px 30px rgba(0,0,0,.5); max-width: 24rem; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app" class="mx-auto max-w-[120rem] p-3 sm:p-5 xl:p-8 flex flex-col gap-4 xl:gap-5">
+
+  <!-- Блок 1. Верхняя панель -->
+  <header class="glass p-4 xl:p-5">
+    <div class="flex flex-wrap items-center gap-x-8 gap-y-4">
+      <div class="flex items-center gap-4 mr-auto">
+        <div class="radar" id="radar" aria-hidden="true"></div>
+        <h1 class="font-display text-2xl xl:text-3xl font-bold tracking-tight leading-tight">
+          Спич-Радар <span class="text-slate-500 font-medium text-lg xl:text-xl">// AI Speech Coach</span>
+        </h1>
+      </div>
+
+      <div class="seg" role="group" aria-label="Режим работы">
+        <button id="modeLive" aria-pressed="true"><i data-lucide="mic" class="w-5 h-5"></i>Живой микрофон</button>
+        <button id="modeDemo" aria-pressed="false"><i data-lucide="sparkles" class="w-5 h-5"></i>Демо-симуляция (для сцены)</button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="btnStart" class="btn btn-primary text-lg"></button>
+        <button id="btnFinish" class="btn btn-warn" disabled><i data-lucide="flag" class="w-5 h-5"></i>Завершить и показать отчет</button>
+        <button id="btnReset" class="btn btn-ghost" title="Сбросить всё"><i data-lucide="rotate-ccw" class="w-5 h-5"></i>Сброс</button>
+      </div>
+    </div>
+
+    <div class="mt-4 pt-4 border-t border-slate-700/50 grid gap-4 lg:grid-cols-[auto_1fr] items-center">
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
+        <div class="flex items-center gap-2 text-slate-300 font-semibold"><i data-lucide="timer" class="w-5 h-5"></i>Регламент</div>
+        <div class="seg" role="group" aria-label="Длительность выступления" id="targetSeg">
+          <button data-sec="60" aria-pressed="false">1 мин</button>
+          <button data-sec="180" aria-pressed="true">3 мин</button>
+          <button data-sec="300" aria-pressed="false">5 мин</button>
+        </div>
+        <div id="clock" class="font-display font-bold text-4xl xl:text-5xl tabular-nums text-emerald-300 transition-colors">03:00</div>
+      </div>
+      <div>
+        <div class="flex justify-between text-sm text-slate-400 mb-1.5">
+          <span id="timeLeftLabel">Осталось</span>
+          <span id="timeRightLabel">Прошло 0:00 из 3:00</span>
+        </div>
+        <div class="h-4 rounded-full bg-slate-800 overflow-hidden border border-slate-700/60">
+          <div id="timeBar" class="h-full rounded-full transition-all duration-300" style="width:0%; background:#34d399"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Уведомления об ошибках -->
+  <div id="notice" class="hidden">
+    <div class="glass tone-amber p-4 flex flex-wrap items-center gap-4" style="border-color:var(--bd)" role="alert">
+      <i data-lucide="alert-triangle" class="w-8 h-8 shrink-0" style="color:var(--c)"></i>
+      <div class="flex-1 min-w-[16rem]">
+        <p id="noticeTitle" class="font-bold text-lg"></p>
+        <p id="noticeText" class="text-slate-300"></p>
+      </div>
+      <button id="noticeDemo" class="btn btn-primary"><i data-lucide="sparkles" class="w-5 h-5"></i>Запустить Демо-симуляцию</button>
+      <button id="noticeClose" class="btn btn-ghost" aria-label="Закрыть уведомление"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+  </div>
+
+  <!-- Блок 2. Метрики -->
+  <section class="grid gap-4 xl:gap-5 sm:grid-cols-2 xl:grid-cols-4" aria-label="Метрики в реальном времени">
+    <article id="cardWpm" class="glass metric tone-idle p-5 flex flex-col gap-3">
+      <div class="flex items-center justify-between text-slate-300 font-semibold">
+        <span class="flex items-center gap-2"><i data-lucide="gauge" class="w-5 h-5"></i>Темп речи</span>
+        <span class="text-sm text-slate-400">слов/мин</span>
+      </div>
+      <div class="big" id="wpmVal">0</div>
+      <div class="badge" id="wpmBadge">Ждём вашу речь</div>
+      <p class="text-slate-400">Средний: <b id="wpmAvg" class="text-slate-200">—</b> · окно 15 с</p>
+    </article>
+
+    <article id="cardPurity" class="glass metric tone-green p-5 flex flex-col gap-3">
+      <div class="flex items-center justify-between text-slate-300 font-semibold">
+        <span class="flex items-center gap-2"><i data-lucide="spell-check" class="w-5 h-5"></i>Чистота речи</span>
+      </div>
+      <div class="big" id="purityVal">100%</div>
+      <div class="badge" id="purityBadge">Речь чистая</div>
+      <div class="h-2 rounded-full bg-slate-700/60 overflow-hidden"><div id="purityBar" class="h-full rounded-full" style="width:100%; background:var(--c); transition:width .5s"></div></div>
+    </article>
+
+    <article id="cardPara" class="glass metric tone-green p-5 flex flex-col gap-3">
+      <div class="flex items-center justify-between text-slate-300 font-semibold">
+        <span class="flex items-center gap-2"><i data-lucide="ban" class="w-5 h-5"></i>Слова-паразиты</span>
+        <span class="text-sm text-slate-400">всего</span>
+      </div>
+      <div class="big" id="paraVal">0</div>
+      <div class="badge" id="paraBadge">Пока чисто</div>
+      <p class="text-slate-400" id="paraTop">Самое частое: —</p>
+    </article>
+
+    <article id="cardPause" class="glass metric tone-green p-5 flex flex-col gap-3">
+      <div class="flex items-center justify-between text-slate-300 font-semibold">
+        <span class="flex items-center gap-2"><i data-lucide="hourglass" class="w-5 h-5"></i>Паузы и заминки</span>
+        <span class="text-sm text-slate-400" id="pauseThrLabel">&gt; 3.5 с</span>
+      </div>
+      <div class="big" id="pauseVal">0</div>
+      <div class="badge" id="pauseBadge">Без заминок</div>
+      <p class="text-slate-400">Тишина сейчас: <b id="silenceNow" class="text-slate-200">—</b></p>
+    </article>
+  </section>
+
+  <main class="grid gap-4 xl:gap-5 xl:grid-cols-12">
+    <!-- Блок 3. Визуализатор и спидометр -->
+    <div class="xl:col-span-5 flex flex-col gap-4 xl:gap-5">
+      <section class="glass p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-xl flex items-center gap-2"><i data-lucide="audio-lines" class="w-6 h-6 text-emerald-300"></i>Голос</h2>
+          <span id="sourceBadge" class="badge tone-idle">Готов к записи</span>
+        </div>
+        <canvas id="wave" class="w-full block" style="height:14rem" aria-label="Звуковая волна голоса"></canvas>
+      </section>
+
+      <section class="glass p-5">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="font-bold text-xl flex items-center gap-2"><i data-lucide="activity" class="w-6 h-6 text-emerald-300"></i>Спидометр темпа</h2>
+          <span class="text-slate-400 text-sm">идеал: 95–145 слов/мин</span>
+        </div>
+        <canvas id="gauge" class="w-full block" style="height:17rem" aria-label="Спидометр темпа речи"></canvas>
+        <div class="flex flex-wrap gap-2 mt-2">
+          <span class="badge tone-blue">&lt; 90 медленно</span>
+          <span class="badge tone-green">95–145 идеально</span>
+          <span class="badge tone-red">&gt; 150 тараторишь</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- Блок 4. Телесуфлёр и транскрипция -->
+    <section class="xl:col-span-7 glass flex flex-col min-h-[36rem]">
+      <div class="flex flex-wrap items-center gap-1 px-4 pt-2 border-b border-slate-700/50" role="tablist">
+        <button class="tab" role="tab" data-tab="live" aria-selected="true"><i data-lucide="mic" class="w-5 h-5"></i>Живой эфир</button>
+        <button class="tab" role="tab" data-tab="dict" aria-selected="false"><i data-lucide="list" class="w-5 h-5"></i>Словарь паразитов и настройки</button>
+        <button class="tab" role="tab" data-tab="script" aria-selected="false"><i data-lucide="book-open" class="w-5 h-5"></i>Шпаргалка доклада</button>
+      </div>
+
+      <div id="panel-live" class="p-5 flex-1">
+        <div id="transcript" class="scroll-area h-[28rem] pr-2">
+          <p id="placeholder" class="text-slate-500 text-xl"></p>
+          <span id="finalText"></span><span id="interimText"></span>
+        </div>
+      </div>
+
+      <div id="panel-dict" class="p-5 flex-1 hidden">
+        <h3 class="font-bold text-xl mb-1">Отслеживаемые слова и фразы</h3>
+        <p class="text-slate-400 mb-4">Слово считается, когда фраза распознана окончательно. Нажмите на крестик, чтобы убрать слово из списка.</p>
+        <div id="chips" class="flex flex-wrap gap-2 mb-5"></div>
+        <form id="addForm" class="flex flex-wrap gap-2 mb-6" autocomplete="off">
+          <input id="addInput" class="field flex-1 min-w-[14rem]" type="text" maxlength="40" placeholder="Своё слово или фраза, например «в принципе»">
+          <button type="submit" class="btn btn-primary"><i data-lucide="plus" class="w-5 h-5"></i>Добавить</button>
+          <button type="button" id="dictReset" class="btn btn-ghost">Вернуть список по умолчанию</button>
+        </form>
+        <div class="rounded-2xl border border-slate-700/60 bg-slate-900/50 p-4">
+          <label for="pauseRange" class="flex justify-between font-semibold mb-2"><span>Порог паузы</span><span id="pauseRangeVal" class="text-emerald-300">3.5 с</span></label>
+          <input id="pauseRange" type="range" min="2" max="6" step="0.5" value="3.5" class="w-full">
+          <p class="text-slate-400 mt-2 text-sm">Молчание дольше этого времени во время выступления засчитывается как пауза.</p>
+        </div>
+      </div>
+
+      <div id="panel-script" class="p-5 flex-1 hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div class="seg" role="group" aria-label="Режим шпаргалки">
+            <button id="viewEdit" aria-pressed="true"><i data-lucide="file-text" class="w-5 h-5"></i>Редактор</button>
+            <button id="viewPrompt" aria-pressed="false"><i data-lucide="book-open" class="w-5 h-5"></i>Суфлёр</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <span id="scriptStats" class="text-slate-300"></span>
+            <span id="scriptFit" class="badge tone-idle hidden"></span>
+          </div>
+        </div>
+        <textarea id="scriptArea" class="field scroll-area h-[24rem] leading-relaxed resize-none" placeholder="Вставьте сюда текст своего доклада. Во время выступления переключитесь на «Суфлёр» — прочитанные слова будут гаснуть."></textarea>
+        <div id="prompter" class="hidden scroll-area relative h-[24rem] rounded-2xl border border-slate-700/60 bg-slate-900/50 p-5 text-3xl leading-[1.7]"></div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button id="scriptSample" class="btn btn-ghost">Подставить пример текста</button>
+          <button id="scriptClear" class="btn btn-ghost">Очистить</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="text-slate-500 text-sm text-center pb-2">
+    Горячие клавиши: <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">D</kbd> — демо-симуляция ·
+    <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">Пробел</kbd> — старт / пауза ·
+    <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">Esc</kbd> — закрыть отчёт
+  </footer>
+</div>
+
+<!-- Блок 5. Итоговый отчёт -->
+<div id="report" class="fixed inset-0 z-50 hidden overflow-y-auto bg-slate-950/90 backdrop-blur-md">
+  <div class="mx-auto max-w-[120rem] p-3 sm:p-5 xl:p-8 flex flex-col gap-4 xl:gap-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-display text-2xl xl:text-4xl font-bold">Итоговый отчёт</h2>
+      <div class="flex flex-wrap gap-2">
+        <button id="reportBack" class="btn btn-ghost"><i data-lucide="x" class="w-5 h-5"></i>Вернуться к тренажёру</button>
+        <button id="reportNew" class="btn btn-primary"><i data-lucide="rotate-ccw" class="w-5 h-5"></i>Новая попытка</button>
+      </div>
+    </div>
+
+    <div class="grid gap-4 xl:gap-5 xl:grid-cols-12">
+      <section class="glass p-6 xl:col-span-5 flex flex-col items-center text-center gap-4" id="scoreCard">
+        <div class="relative w-[15rem] h-[15rem]">
+          <svg viewBox="0 0 160 160" class="w-full h-full -rotate-90">
+            <circle class="ring-bg" cx="80" cy="80" r="68" fill="none" stroke-width="12"></circle>
+            <circle id="ringFg" class="ring-fg" cx="80" cy="80" r="68" fill="none" stroke-width="12" stroke-linecap="round" stroke-dasharray="427.26" stroke-dashoffset="427.26" stroke="#34d399"></circle>
+          </svg>
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span id="scoreNum" class="font-display font-bold text-6xl" style="color:var(--c)">0</span>
+            <span class="text-slate-400">из 100</span>
+          </div>
+        </div>
+        <h3 id="verdict" class="text-2xl font-bold max-w-[28rem]"></h3>
+        <div id="scoreChips" class="flex flex-wrap justify-center gap-2"></div>
+      </section>
+
+      <section class="glass p-6 xl:col-span-7">
+        <h3 class="font-bold text-2xl mb-4 flex items-center gap-2"><i data-lucide="lightbulb" class="w-6 h-6 text-amber-300"></i>Что исправить</h3>
+        <div id="tips" class="flex flex-col gap-3"></div>
+      </section>
+    </div>
+
+    <section class="glass p-6">
+      <h3 class="font-bold text-2xl mb-1">Динамика темпа речи по времени</h3>
+      <p class="text-slate-400 mb-4">Замер каждые 10 секунд выступления. Зелёная полоса — идеальный темп 95–145 слов/мин.</p>
+      <div class="relative" style="height:22rem"><canvas id="chartCanvas"></canvas></div>
+      <p id="chartEmpty" class="hidden text-slate-400 text-lg py-8 text-center">Выступление слишком короткое для графика — говорите дольше 3 секунд.</p>
+    </section>
+
+    <div class="grid gap-4 xl:gap-5 xl:grid-cols-2">
+      <section class="glass p-6">
+        <h3 class="font-bold text-2xl mb-4 flex items-center gap-2"><i data-lucide="ban" class="w-6 h-6 text-rose-300"></i>Топ слов-паразитов</h3>
+        <div id="topPara" class="flex flex-col gap-4"></div>
+      </section>
+      <section class="glass p-6">
+        <h3 class="font-bold text-2xl mb-4 flex items-center gap-2"><i data-lucide="file-text" class="w-6 h-6 text-sky-300"></i>Текст выступления</h3>
+        <div id="reportText" class="scroll-area max-h-[22rem] pr-2 text-xl leading-relaxed text-slate-200"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ============ Утилиты ============ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const norm = s => String(s).toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\p{N}-]+/gu, '');
+const mmss = sec => { sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); };
+const mmss2 = sec => { sec = Math.max(0, Math.round(sec)); return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0'); };
+const fmtMs = ms => mmss(ms / 1000);
+const plural = n => (n % 10 === 1 && n % 100 !== 11) ? 'раз' : ((n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 'раза' : 'раз');
+const icons = () => { if (window.lucide) { try { window.lucide.createIcons(); } catch (e) { /* иконки необязательны */ } } };
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* хранилище недоступно */ } }
+};
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const TONES = { green: [52, 211, 153], blue: [56, 189, 248], amber: [251, 191, 36], red: [251, 113, 133], idle: [148, 163, 184] };
+const TONE_NAMES = ['green', 'blue', 'amber', 'red', 'idle'];
+const setTone = (el, tone) => { TONE_NAMES.forEach(t => el.classList.remove('tone-' + t)); el.classList.add('tone-' + tone); };
+const setText = (el, txt) => { if (el.textContent !== txt) el.textContent = txt; };
+
+const DEFAULT_WORDS = ['ну', 'короче', 'типа', 'как бы', 'в общем', 'это самое', 'так сказать', 'собственно', 'вообще', 'блин', 'вот', 'значит', 'слушайте'];
+
+/* ============ Демо-сценарий (около 45 секунд) ============ */
+const DEMO = [
+  { t: 'Здравствуйте, уважаемое жюри!', wpm: 95 },
+  { t: 'Меня зовут Алексей, и я представляю проект «Умная метеостанция».', wpm: 105 },
+  { t: 'Ну, идея появилась, когда нам не хватило данных о погоде во дворе.', wpm: 115 },
+  { t: 'Станция измеряет температуру, влажность, давление и, короче, отправляет всё на сайт школы.', wpm: 165 },
+  { t: 'Мы собрали её на Arduino, типа с тремя датчиками и солнечной панелью.', wpm: 185 },
+  { t: 'Две недели тестов показали, что вот датчик на солнце, как бы, завышает температуру.', wpm: 190 },
+  { pause: 4800 },
+  { t: 'Значит, мы добавили защитный экран.', wpm: 80 },
+  { t: 'В общем, ошибка исправлена, и точность выросла вдвое.', wpm: 90 },
+  { t: 'Дальше, собственно, подключим датчик воздуха.', wpm: 90 },
+  { t: 'Спасибо за внимание!', wpm: 85 }
+];
+const DEMO_SCRIPT = 'Здравствуйте, уважаемое жюри! Меня зовут Алексей, и я представляю проект «Умная метеостанция». Идея появилась, когда нам не хватило данных о погоде во дворе. Станция измеряет температуру, влажность, давление и отправляет всё на сайт школы. Мы собрали её на Arduino с тремя датчиками и солнечной панелью. Две недели тестов показали, что датчик на солнце завышает температуру. Мы добавили защитный экран. Ошибка исправлена, и точность выросла вдвое. Дальше подключим датчик качества воздуха. Спасибо за внимание!';
+
+/* ============ Состояние ============ */
+const freshSession = () => ({
+  status: 'idle', starting: false, acc: 0, segStart: 0,
+  wordEvents: [], firstT: null, lastT: 0,
+  counts: new Map(), parasites: 0, lastPara: '',
+  pauses: 0, pauseEvents: [], pauseFlag: false, hasSpoken: false, lastActivity: 0,
+  interim: '', interimWords: 0, interimTimes: [], interimProcessed: 0,
+  chunks: [], overNotified: false,
+  rec: null, recFatal: false, quickEnds: 0, netErr: 0, recStartedAt: 0,
+  demo: null, demoSpeaking: false,
+  ptr: 0, painted: 0, curEl: null,
+  wpmNow: 0, wpmShown: 0, gauge: 0, paceTone: 'idle', level: 0, rms: 0
+});
+const S = Object.assign({
+  mode: 'live', target: 180, pauseThr: 3500, dict: [], script: { cores: [], spans: [] }, chart: null
+}, freshSession());
+
+try {
+  const saved = JSON.parse(store.get('speechRadar.dict') || 'null');
+  S.dict = Array.isArray(saved) && saved.length ? saved : DEFAULT_WORDS.slice();
+} catch (e) { S.dict = DEFAULT_WORDS.slice(); }
+
+const elapsed = () => S.status === 'running' ? S.acc + (performance.now() - S.segStart) : S.acc;
+
+/* ============ Поиск слов-паразитов ============ */
+let phraseIndex = new Map();
+function rebuildIndex() {
+  phraseIndex = new Map();
+  S.dict.forEach(p => {
+    const parts = p.split(/\s+/).map(norm).filter(Boolean);
+    if (!parts.length) return;
+    if (!phraseIndex.has(parts[0])) phraseIndex.set(parts[0], []);
+    phraseIndex.get(parts[0]).push({ parts, label: p });
+  });
+  phraseIndex.forEach(arr => arr.sort((a, b) => b.parts.length - a.parts.length));
+}
+function analyze(text, pending) {
+  const toks = text.split(/\s+/).filter(Boolean);
+  const cores = toks.map(norm);
+  const out = [], hits = [];
+  let i = 0, words = 0;
+  while (i < toks.length) {
+    if (!cores[i]) { out.push(esc(toks[i])); i++; continue; }
+    let matched = null;
+    const cand = phraseIndex.get(cores[i]);
+    if (cand) {
+      for (const c of cand) {
+        let ok = true;
+        for (let k = 0; k < c.parts.length; k++) { if (cores[i + k] !== c.parts[k]) { ok = false; break; } }
+        if (ok) { matched = c; break; }
+      }
+    }
+    if (matched) {
+      const len = matched.parts.length;
+      out.push('<span class="para' + (pending ? ' pending' : '') + '">' + esc(toks.slice(i, i + len).join(' ')) + '</span>');
+      hits.push(matched.label); words += len; i += len;
+    } else { out.push(esc(toks[i])); words++; i++; }
+  }
+  return { html: out.join(' '), hits, words, cores };
+}
+
+/* ============ Ссылки на DOM ============ */
+const btnStart = $('#btnStart'), btnFinish = $('#btnFinish'), btnReset = $('#btnReset');
+const modeLive = $('#modeLive'), modeDemo = $('#modeDemo'), radar = $('#radar');
+const finalText = $('#finalText'), interimText = $('#interimText'), transcript = $('#transcript'), placeholder = $('#placeholder');
+const scriptArea = $('#scriptArea'), prompter = $('#prompter');
+const wave = $('#wave'), wctx = wave.getContext('2d');
+const gaugeCv = $('#gauge'), gctx = gaugeCv.getContext('2d');
+
+function toast(msg, tone) {
+  const d = document.createElement('div');
+  d.className = 'toast tone-' + (tone || 'green');
+  d.textContent = msg;
+  $('#toasts').appendChild(d);
+  setTimeout(() => { d.style.opacity = '0'; d.style.transition = 'opacity .4s'; setTimeout(() => d.remove(), 450); }, 3200);
+}
+
+/* ============ Уведомления об ошибках ============ */
+const NOTICES = {
+  unsupported: ['Браузер не поддерживает распознавание речи', 'Web Speech API работает в Chrome, Edge и Safari. Откройте приложение там или запустите демо — ему микрофон не нужен.'],
+  denied: ['Доступ к микрофону заблокирован', 'Так бывает в окне предпросмотра (iframe) и на чужих ноутбуках. Разрешите микрофон для этого сайта в настройках браузера или запустите демо.'],
+  nomic: ['Микрофон не найден', 'Подключите микрофон и попробуйте снова. Если времени нет, запустите демо-симуляцию.'],
+  network: ['Нет связи с сервисом распознавания', 'Chrome отправляет речь на сервер для расшифровки, поэтому нужен интернет. Проверьте соединение или запустите демо.'],
+  unstable: ['Распознавание речи постоянно отключается', 'Браузер не удерживает запись. Перезагрузите страницу или запустите демо-симуляцию.'],
+  lang: ['Русский язык недоступен для распознавания', 'Ваш браузер не поддерживает ru-RU. Запустите демо или откройте приложение в Chrome.']
+};
+function showNotice(kind) {
+  const n = NOTICES[kind] || NOTICES.unstable;
+  $('#noticeTitle').textContent = n[0];
+  $('#noticeText').textContent = n[1];
+  $('#notice').classList.remove('hidden');
+  icons();
+}
+const hideNotice = () => $('#notice').classList.add('hidden');
+
+/* ============ Аудио (Web Audio API) ============ */
+const audio = { stream: null, ctx: null, analyser: null, fft: null, time: null };
+async function initAudio() {
+  if (audio.analyser) return 'ok';
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return 'none';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { /* продолжаем */ } }
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.78;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    audio.stream = stream; audio.ctx = ctx; audio.analyser = analyser;
+    audio.fft = new Uint8Array(analyser.frequencyBinCount);
+    audio.time = new Uint8Array(analyser.fftSize);
+    return 'ok';
+  } catch (e) {
+    const n = e && e.name;
+    if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError') return 'denied';
+    if (n === 'NotFoundError' || n === 'DevicesNotFoundError' || n === 'OverconstrainedError') return 'nomic';
+    return 'none';
+  }
+}
+function stopAudio() {
+  try { if (audio.stream) audio.stream.getTracks().forEach(t => t.stop()); } catch (e) { /* уже остановлен */ }
+  try { if (audio.ctx) audio.ctx.close(); } catch (e) { /* уже закрыт */ }
+  audio.stream = null; audio.ctx = null; audio.analyser = null; audio.fft = null; audio.time = null;
+}
+
+/* ============ Ввод слов: интерим и финал ============ */
+function markActivity(fromSound) {
+  if (fromSound && !S.hasSpoken) return;
+  S.lastActivity = elapsed();
+  S.hasSpoken = true;
+  S.pauseFlag = false;
+}
+
+function setInterim(text) {
+  text = (text || '').trim();
+  if (text === S.interim) return;
+  const toks = text ? text.split(/\s+/).filter(Boolean) : [];
+  const el = elapsed();
+  while (S.interimTimes.length < toks.length) S.interimTimes.push(el);
+  if (S.interimTimes.length > toks.length) S.interimTimes.length = toks.length;
+  S.interim = text;
+  if (text) {
+    const a = analyze(text, true);
+    S.interimWords = a.cores.filter(Boolean).length;
+    interimText.innerHTML = ' ' + a.html;
+    markActivity();
+    if (toks.length > S.interimProcessed) advanceScript(toks.slice(S.interimProcessed));
+    S.interimProcessed = toks.length;
+  } else {
+    S.interimWords = 0; S.interimProcessed = 0; interimText.innerHTML = '';
+  }
+  scrollTranscript();
+}
+
+function commitFinal(words) {
+  words = (words || []).filter(Boolean);
+  if (!words.length) return;
+  const el = elapsed();
+  const times = words.map((w, k) => {
+    const t = S.interimTimes[k];
+    return t === undefined ? el : t;
+  });
+  const processed = S.interimProcessed;
+  S.interimTimes = []; S.interim = ''; S.interimWords = 0; S.interimProcessed = 0;
+  interimText.innerHTML = '';
+
+  const text = words.join(' ');
+  const a = analyze(text, false);
+  let prev = S.lastT;
+  a.cores.forEach((c, k) => {
+    if (!c) return;
+    const t = Math.max(prev, times[k]);
+    prev = t;
+    S.wordEvents.push({ t, w: c });
+    if (S.firstT === null) S.firstT = t;
+    S.lastT = t;
+  });
+  if (a.hits.length) {
+    a.hits.forEach(h => S.counts.set(h, (S.counts.get(h) || 0) + 1));
+    S.parasites += a.hits.length;
+    S.lastPara = a.hits[a.hits.length - 1];
+    pulseCard();
+  }
+  S.chunks.push(a.html);
+  finalText.insertAdjacentHTML('beforeend', a.html + ' ');
+  markActivity();
+  advanceScript(words.slice(processed));
+  scrollTranscript();
+}
+
+function pulseCard() {
+  const c = $('#cardPara');
+  c.classList.remove('pulse-red');
+  void c.offsetWidth;
+  c.classList.add('pulse-red');
+  setTimeout(() => c.classList.remove('pulse-red'), 1000);
+}
+function scrollTranscript() { transcript.scrollTop = transcript.scrollHeight; }
+
+/* ============ Живое распознавание речи ============ */
+function createRecognizer() {
+  const r = new SR();
+  r.lang = 'ru-RU';
+  r.continuous = true;
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+  let lastFinal = -1;
+
+  r.onstart = () => { lastFinal = -1; S.recStartedAt = performance.now(); };
+
+  r.onresult = e => {
+    if (S.status !== 'running') return;
+    S.netErr = 0;
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      const txt = (res[0] && res[0].transcript || '').trim();
+      if (!txt) continue;
+      if (res.isFinal) {
+        if (i > lastFinal) { lastFinal = i; commitFinal(txt.split(/\s+/)); }
+      } else { interim += ' ' + txt; }
+    }
+    setInterim(interim);
+  };
+
+  r.onerror = e => {
+    const er = e.error;
+    if (er === 'no-speech' || er === 'aborted') return;
+    if (er === 'not-allowed' || er === 'service-not-allowed') { fatalLive('denied'); return; }
+    if (er === 'audio-capture') { fatalLive('nomic'); return; }
+    if (er === 'language-not-supported') { fatalLive('lang'); return; }
+    if (er === 'network') {
+      S.netErr++;
+      if (S.netErr >= 3) { fatalLive('network'); return; }
+      toast('Нет связи с сервисом распознавания, пробую снова…', 'amber');
+      return;
+    }
+    toast('Ошибка распознавания: ' + er, 'amber');
+  };
+
+  r.onend = () => {
+    if (S.interim && S.status === 'running' && S.rec === r) {
+      commitFinal(S.interim.split(/\s+/));
+    }
+    if (S.rec !== r || S.status !== 'running' || S.mode !== 'live' || S.recFatal) return;
+    const dt = performance.now() - S.recStartedAt;
+    S.quickEnds = dt < 800 ? S.quickEnds + 1 : 0;
+    if (S.quickEnds > 8) { fatalLive('unstable'); return; }
+    setTimeout(() => {
+      if (S.rec === r && S.status === 'running' && !S.recFatal) {
+        try { r.start(); } catch (err) { /* уже запущено */ }
+      }
+    }, S.quickEnds > 2 ? 600 : 100);
+  };
+  return r;
+}
+
+function teardownLive() {
+  const r = S.rec;
+  S.rec = null;
+  if (r) {
+    r.onstart = r.onresult = r.onerror = r.onend = null;
+    try { r.abort(); } catch (e) { /* уже остановлено */ }
+  }
+}
+
+function fatalLive(kind) {
+  S.recFatal = true;
+  if (S.status === 'running') { S.acc = elapsed(); S.status = 'paused'; }
+  teardownLive();
+  if (kind === 'denied' || kind === 'nomic') stopAudio();
+  S.starting = false;
+  updateButtons();
+  showNotice(kind);
+}
+
+async function startLive() {
+  if (!SR) { showNotice('unsupported'); return false; }
+  S.recFatal = false; S.quickEnds = 0; S.netErr = 0;
+  const a = await initAudio();
+  if (a === 'denied') { showNotice('denied'); return false; }
+  if (a === 'nomic') { showNotice('nomic'); return false; }
+  S.rec = createRecognizer();
+  try { S.rec.start(); } catch (e) { /* уже запущено */ }
+  return true;
+}
+
+/* ============ Демо-симуляция ============ */
+function buildDemo() {
+  const ev = [], speak = [];
+  let t = 700;
+  DEMO.forEach((seg, si) => {
+    if (seg.pause) { t += seg.pause; return; }
+    const base = 60000 / seg.wpm;
+    const s0 = t;
+    seg.t.split(/\s+/).forEach(w => {
+      ev.push({ t, type: 'w', w, si });
+      const len = norm(w).length;
+      let d = base * (0.55 + 0.09 * Math.min(len, 10)) / 1.14;
+      if (/[,;:]$/.test(w)) d += 160;
+      t += d;
+    });
+    speak.push([s0, t]);
+    ev.push({ t: t + 120, type: 'c', si });
+    t += 420;
+  });
+  ev.push({ t: t + 700, type: 'end' });
+  return { ev, speak, i: 0, cur: [] };
+}
+
+function demoTick(el) {
+  const d = S.demo;
+  if (!d) return;
+  while (d.i < d.ev.length && d.ev[d.i].t <= el) {
+    const e = d.ev[d.i++];
+    if (e.type === 'w') { d.cur.push(e.w); setInterim(d.cur.join(' ')); }
+    else if (e.type === 'c') { const ws = d.cur.slice(); d.cur = []; commitFinal(ws); }
+    else if (e.type === 'end') { finishSession(); return; }
+  }
+  S.demoSpeaking = d.speak.some(r => el >= r[0] && el <= r[1]);
+}
+
+/* ============ Управление сессией ============ */
+async function startSession() {
+  if (S.status !== 'idle' || S.starting) return;
+  hideNotice();
+  S.starting = true;
+  if (S.mode === 'demo' && !scriptArea.value.trim()) { scriptArea.value = DEMO_SCRIPT; updateScriptStats(); }
+  buildScript();
+  if (S.mode === 'live') {
+    const ok = await startLive();
+    if (!ok) { S.starting = false; updateButtons(); return; }
+  }
+  if (S.status !== 'idle') { S.starting = false; return; }
+  S.starting = false;
+  S.acc = 0; S.segStart = performance.now(); S.status = 'running';
+  if (S.mode === 'demo') S.demo = buildDemo();
+  updateButtons();
+}
+
+function pauseSession() {
+  if (S.status !== 'running') return;
+  if (S.mode === 'live' && S.interim) commitFinal(S.interim.split(/\s+/));
+  S.acc = elapsed();
+  S.status = 'paused';
+  teardownLive();
+  updateButtons();
+}
+
+async function resumeSession() {
+  if (S.status !== 'paused' || S.starting) return;
+  hideNotice();
+  if (S.mode === 'live') {
+    S.starting = true;
+    const ok = await startLive();
+    S.starting = false;
+    if (!ok) return;
+  }
+  S.segStart = performance.now();
+  S.status = 'running';
+  if (S.mode === 'live') markActivity(true);
+  updateButtons();
+}
+
+function finishSession() {
+  if (S.status === 'idle') { toast('Сначала начните выступление', 'amber'); return; }
+  if (S.status === 'finished') { showReport(); return; }
+  if (S.interim && S.mode === 'live') commitFinal(S.interim.split(/\s+/));
+  const el = elapsed();
+  S.status = 'finished';
+  S.acc = el;
+  teardownLive();
+  stopAudio();
+  setInterim('');
+  S.demoSpeaking = false;
+  updateButtons();
+  showReport();
+}
+
+function resetAll() {
+  teardownLive();
+  stopAudio();
+  Object.assign(S, freshSession());
+  finalText.innerHTML = ''; interimText.innerHTML = '';
+  hideReport();
+  if (S.chart) { S.chart.destroy(); S.chart = null; }
+  buildScript();
+  updateButtons();
+}
+
+function setMode(m) {
+  S.mode = m;
+  updateButtons();
+}
+
+function launchDemo() {
+  if (S.mode === 'demo' && S.status === 'running') { toast('Демо уже идёт', 'blue'); return; }
+  hideNotice();
+  resetAll();
+  setMode('demo');
+  startSession();
+}
+
+function toggleMain() {
+  if (S.starting) return;
+  if (S.status === 'idle') startSession();
+  else if (S.status === 'running') pauseSession();
+  else if (S.status === 'paused') resumeSession();
+  else if (S.status === 'finished') { resetAll(); startSession(); }
+}
+
+function updateButtons() {
+  const map = { idle: ['play', 'Старт'], running: ['pause', 'Пауза'], paused: ['play', 'Продолжить'], finished: ['rotate-ccw', 'Новая попытка'] };
+  const [ic, tx] = map[S.status];
+  const key = ic + tx;
+  if (btnStart.dataset.k !== key) {
+    btnStart.dataset.k = key;
+    btnStart.innerHTML = '<i data-lucide="' + ic + '" class="w-6 h-6"></i><span>' + tx + '</span>';
+    icons();
+  }
+  btnFinish.disabled = S.status === 'idle';
+  modeLive.setAttribute('aria-pressed', String(S.mode === 'live'));
+  modeDemo.setAttribute('aria-pressed', String(S.mode === 'demo'));
+  radar.classList.toggle('active', S.status === 'running');
+}
+
+/* ============ Метрики ============ */
+function computeWpm(el) {
+  const win = 15000, start = el - win;
+  let n = 0;
+  for (let i = S.wordEvents.length - 1; i >= 0; i--) { if (S.wordEvents[i].t >= start) n++; else break; }
+  n += S.interimWords;
+  const first = S.firstT === null ? el : S.firstT;
+  const span = clamp(el - first, 4000, win);
+  return n / (span / 60000);
+}
+function avgWpm() {
+  const total = S.wordEvents.length;
+  if (total < 3) return 0;
+  const span = Math.max(S.lastT - S.firstT, 5000);
+  return total / (span / 60000);
+}
+function paceStatus(w, enough) {
+  if (!enough) return { tone: 'idle', label: 'Ждём вашу речь' };
+  if (w < 90) return { tone: 'blue', label: 'Медленно (зал уснет)' };
+  if (w < 95) return { tone: 'amber', label: 'Чуть медленнее нормы' };
+  if (w <= 145) return { tone: 'green', label: 'Идеальный темп' };
+  if (w <= 150) return { tone: 'amber', label: 'Чуть быстрее нормы' };
+  return { tone: 'red', label: 'Тараторишь!' };
+}
+function purityPct() {
+  const total = S.wordEvents.length;
+  const share = total > 0 ? S.parasites / total : 0;
+  return Math.round(clamp(100 - share * 100 * 3, 0, 100));
+}
+
+function silenceTick(el) {
+  if (!S.hasSpoken) return;
+  if (S.mode === 'live' && audio.analyser && S.rms > 0.05) markActivity(true);
+  const sil = el - S.lastActivity;
+  if (sil > S.pauseThr && !S.pauseFlag) {
+    S.pauseFlag = true;
+    S.pauses++;
+    S.pauseEvents.push(S.lastActivity);
+  }
+}
+
+function updateMetrics(el) {
+  const active = S.status === 'running' || S.status === 'paused';
+  const cur = computeWpm(el);
+  S.wpmNow = S.status === 'running' ? cur : (S.status === 'finished' ? S.wpmNow : cur);
+  S.wpmShown += (S.wpmNow - S.wpmShown) * 0.4;
+  const enough = (S.wordEvents.length + S.interimWords) >= 6;
+  const st = paceStatus(S.wpmNow, enough);
+  S.paceTone = st.tone;
+  setTone($('#cardWpm'), st.tone);
+  setTone($('#wpmBadge'), st.tone);
+  setText($('#wpmVal'), String(Math.round(enough ? S.wpmShown : 0)));
+  setText($('#wpmBadge'), st.label);
+  const avg = avgWpm();
+  setText($('#wpmAvg'), avg ? Math.round(avg) + ' сл/мин' : '—');
+
+  const pur = purityPct();
+  const pTone = pur >= 90 ? 'green' : (pur >= 75 ? 'amber' : 'red');
+  setTone($('#cardPurity'), pTone); setTone($('#purityBadge'), pTone);
+  setText($('#purityVal'), pur + '%');
+  setText($('#purityBadge'), pur >= 90 ? 'Речь чистая' : (pur >= 75 ? 'Есть мусор' : 'Много паразитов'));
+  $('#purityBar').style.width = pur + '%';
+
+  const pc = S.parasites;
+  const cTone = pc === 0 ? 'green' : (pc <= 3 ? 'amber' : 'red');
+  setTone($('#cardPara'), cTone); setTone($('#paraBadge'), cTone);
+  setText($('#paraVal'), String(pc));
+  setText($('#paraBadge'), S.lastPara ? 'Последнее: «' + S.lastPara + '»' : 'Пока чисто');
+  let top = '';
+  S.counts.forEach((n, w) => { if (!top || n > S.counts.get(top)) top = w; });
+  setText($('#paraTop'), top ? 'Самое частое: «' + top + '» ×' + S.counts.get(top) : 'Самое частое: —');
+
+  const pz = S.pauses;
+  const zTone = pz === 0 ? 'green' : (pz === 1 ? 'amber' : 'red');
+  setTone($('#cardPause'), zTone); setTone($('#pauseBadge'), zTone);
+  setText($('#pauseVal'), String(pz));
+  setText($('#pauseBadge'), pz === 0 ? 'Без заминок' : (pz === 1 ? 'Одна заминка' : 'Много заминок'));
+  setText($('#pauseThrLabel'), '> ' + (S.pauseThr / 1000).toFixed(1) + ' с');
+  const silEl = $('#silenceNow');
+  if (S.status === 'running' && S.hasSpoken) {
+    const sil = Math.max(0, el - S.lastActivity) / 1000;
+    setText(silEl, sil.toFixed(1) + ' с');
+    silEl.style.color = sil * 1000 > S.pauseThr ? '#fb7185' : '';
+  } else { setText(silEl, '—'); silEl.style.color = ''; }
+
+  // Источник звука
+  const sb = $('#sourceBadge');
+  let tone = 'idle', label;
+  if (S.status === 'idle') label = S.mode === 'demo' ? 'Демо готово' : 'Готов к записи';
+  else if (S.status === 'paused') { tone = 'amber'; label = 'Пауза'; }
+  else if (S.status === 'finished') label = 'Запись окончена';
+  else if (S.level > 0.07) { tone = 'green'; label = S.mode === 'demo' ? 'Демо: голос' : 'Слышу голос'; }
+  else label = 'Тихо…';
+  setTone(sb, tone); setText(sb, label);
+
+  // Плейсхолдер
+  const hasContent = finalText.textContent.trim() || S.interim;
+  placeholder.classList.toggle('hidden', !!hasContent);
+  if (!hasContent) {
+    placeholder.textContent = S.status === 'idle'
+      ? (S.mode === 'demo' ? 'Нажмите «Старт» — демо само «произнесёт» защиту проекта.' : 'Нажмите «Старт» и начните говорить. Распознанный текст появится здесь, а слова-паразиты подсветятся красным.')
+      : 'Слушаю… говорите.';
+  }
+  void active;
+}
+
+function updateTimerUI(el) {
+  const total = S.target * 1000;
+  const rem = total - el;
+  const clock = $('#clock');
+  setText(clock, rem >= 0 ? mmss2(Math.ceil(rem / 1000)) : '+' + mmss2(Math.floor(-rem / 1000)));
+  const ratio = el / total;
+  const tone = ratio < 0.75 ? '#34d399' : (ratio < 1 ? '#fbbf24' : '#fb7185');
+  const bar = $('#timeBar');
+  bar.style.width = clamp(ratio * 100, 0, 100) + '%';
+  bar.style.background = tone;
+  clock.style.color = tone;
+  setText($('#timeLeftLabel'), rem >= 0 ? 'Осталось' : 'Регламент превышен');
+  setText($('#timeRightLabel'), 'Прошло ' + fmtMs(el) + ' из ' + fmtMs(total));
+  if (S.status === 'running' && el >= total && !S.overNotified) {
+    S.overNotified = true;
+    toast('Регламент закончился — пора завершать', 'red');
+  }
+}
+
+/* ============ Рисование: звуковая волна ============ */
+const NB = 44;
+const bars = new Float32Array(NB), tgt = new Float32Array(NB);
+
+function fitCanvas(c) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(c.clientWidth * dpr)), h = Math.max(1, Math.round(c.clientHeight * dpr));
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  return { w, h, dpr };
+}
+
+function simulate(t, amp) {
+  for (let i = 0; i < NB; i++) {
+    const f = i / NB;
+    const prof = Math.exp(-f * 1.7) * (0.55 + 0.45 * Math.sin(i * 0.85 + t * 0.009 + Math.sin(t * 0.0027 + i * 0.3) * 2.2));
+    tgt[i] = clamp(amp * prof * (0.85 + 0.15 * Math.sin(t * 0.02 + i * 1.7)), 0, 1);
+  }
+}
+
+function updateBars(now, el) {
+  if (S.mode === 'live' && audio.analyser) {
+    audio.analyser.getByteFrequencyData(audio.fft);
+    audio.analyser.getByteTimeDomainData(audio.time);
+    for (let i = 0; i < NB; i++) {
+      const f = i / NB;
+      const bin = 1 + Math.floor(Math.pow(f, 1.45) * 70);
+      tgt[i] = clamp(Math.pow(audio.fft[bin] / 255, 1.4) * (1 + f * 0.9), 0, 1);
+    }
+    let sum = 0;
+    for (let i = 0; i < audio.time.length; i++) { const v = (audio.time[i] - 128) / 128; sum += v * v; }
+    S.rms = Math.sqrt(sum / audio.time.length);
+  } else if (S.status === 'running' && S.mode === 'demo') {
+    const amp = S.demoSpeaking ? 0.5 + 0.5 * Math.abs(Math.sin(now * 0.0105)) * (0.75 + 0.25 * Math.sin(now * 0.0031)) : 0.02;
+    simulate(now, amp);
+    S.rms = S.demoSpeaking ? 0.12 : 0;
+  } else if (S.status === 'running' && S.mode === 'live') {
+    const talking = S.hasSpoken && (el - S.lastActivity) < 900;
+    simulate(now, talking ? 0.55 + 0.35 * Math.abs(Math.sin(now * 0.0105)) : 0.02);
+    S.rms = talking ? 0.1 : 0;
+  } else {
+    simulate(now, 0.018 + 0.012 * Math.sin(now * 0.002));
+    S.rms = 0;
+  }
+}
+
+function drawWave(now, el) {
+  updateBars(now, el);
+  const { w, h, dpr } = fitCanvas(wave);
+  const c = wctx;
+  c.clearRect(0, 0, w, h);
+  let m = 0;
+  for (let i = 0; i < NB; i++) {
+    bars[i] += (tgt[i] - bars[i]) * (tgt[i] > bars[i] ? 0.5 : 0.14);
+    m += bars[i];
+  }
+  S.level = m / NB;
+  const [r, g, b] = TONES[S.paceTone === 'idle' ? 'green' : S.paceTone];
+  const cx = w / 2, cy = h / 2, pad = 8 * dpr;
+  const step = (w / 2 - pad) / NB, bw = Math.max(2 * dpr, step * 0.58), maxH = h * 0.44;
+  const hh = i => Math.min(maxH, Math.max(1.5 * dpr, bars[i] * maxH * 1.5));
+
+  c.strokeStyle = 'rgba(148,163,184,.16)';
+  c.lineWidth = dpr;
+  c.beginPath(); c.moveTo(pad, cy); c.lineTo(w - pad, cy); c.stroke();
+
+  // Огибающая
+  const pts = [];
+  for (let i = NB - 1; i >= 0; i--) pts.push([cx - (i + 0.5) * step, cy - hh(i)]);
+  for (let i = 0; i < NB; i++) pts.push([cx + (i + 0.5) * step, cy - hh(i)]);
+  const last = pts[pts.length - 1];
+  c.beginPath();
+  c.moveTo(pts[0][0], 2 * cy - pts[0][1]);
+  c.lineTo(pts[0][0], pts[0][1]);
+  for (let j = 0; j < pts.length - 1; j++) {
+    c.quadraticCurveTo(pts[j][0], pts[j][1], (pts[j][0] + pts[j + 1][0]) / 2, (pts[j][1] + pts[j + 1][1]) / 2);
+  }
+  c.lineTo(last[0], last[1]);
+  c.lineTo(last[0], 2 * cy - last[1]);
+  for (let j = pts.length - 1; j > 0; j--) {
+    c.quadraticCurveTo(pts[j][0], 2 * cy - pts[j][1], (pts[j][0] + pts[j - 1][0]) / 2, 2 * cy - (pts[j][1] + pts[j - 1][1]) / 2);
+  }
+  c.closePath();
+  c.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',.13)';
+  c.fill();
+
+  // Столбики
+  const grad = c.createLinearGradient(0, cy - maxH, 0, cy + maxH);
+  grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',.25)');
+  grad.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',1)');
+  grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',.25)');
+  c.strokeStyle = grad;
+  c.lineCap = 'round';
+  c.beginPath();
+  for (let i = 0; i < NB; i++) {
+    const y = hh(i), xl = cx - (i + 0.5) * step, xr = cx + (i + 0.5) * step;
+    c.moveTo(xl, cy - y); c.lineTo(xl, cy + y);
+    c.moveTo(xr, cy - y); c.lineTo(xr, cy + y);
+  }
+  c.globalAlpha = 0.14; c.lineWidth = bw * 2.8; c.stroke();
+  c.globalAlpha = 1; c.lineWidth = bw; c.stroke();
+}
+
+/* ============ Рисование: спидометр ============ */
+const GMAX = 200;
+const ZONES = [[0, 90, '#38bdf8'], [90, 95, '#fbbf24'], [95, 145, '#34d399'], [145, 150, '#fbbf24'], [150, 200, '#fb7185']];
+
+function drawGauge() {
+  const { w, h, dpr } = fitCanvas(gaugeCv);
+  const c = gctx;
+  c.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h * 0.64;
+  const R = Math.max(40, Math.min(w * 0.4, cy - 34 * dpr));
+  const thick = R * 0.2;
+  const ang = v => Math.PI + clamp(v / GMAX, 0, 1) * Math.PI;
+
+  c.lineCap = 'butt';
+  c.lineWidth = thick;
+  c.strokeStyle = 'rgba(148,163,184,.1)';
+  c.beginPath(); c.arc(cx, cy, R - thick / 2, Math.PI, 2 * Math.PI); c.stroke();
+  ZONES.forEach(z => {
+    c.strokeStyle = z[2];
+    c.globalAlpha = 0.85;
+    c.beginPath(); c.arc(cx, cy, R - thick / 2, ang(z[0]), ang(z[1])); c.stroke();
+  });
+  c.globalAlpha = 1;
+
+  // Деления и подписи
+  c.fillStyle = '#94a3b8';
+  c.font = '600 ' + Math.round(13 * dpr) + 'px Onest, sans-serif';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (let v = 0; v <= GMAX; v += 10) {
+    const a = ang(v), major = v % 50 === 0;
+    const r1 = R + 3 * dpr, r2 = R + (major ? 11 : 7) * dpr;
+    c.strokeStyle = major ? 'rgba(226,232,240,.8)' : 'rgba(148,163,184,.45)';
+    c.lineWidth = (major ? 2 : 1) * dpr;
+    c.beginPath(); c.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); c.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); c.stroke();
+    if (major) c.fillText(String(v), cx + Math.cos(a) * (R + 24 * dpr), cy + Math.sin(a) * (R + 24 * dpr));
+  }
+
+  // Стрелка
+  S.gauge += (S.wpmNow - S.gauge) * 0.08;
+  const a = ang(S.gauge);
+  const [r, g, b] = TONES[S.paceTone];
+  c.strokeStyle = '#f8fafc';
+  c.lineWidth = 4 * dpr; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * (R - thick * 1.1), cy + Math.sin(a) * (R - thick * 1.1)); c.stroke();
+  c.fillStyle = '#0f172a'; c.strokeStyle = 'rgb(' + r + ',' + g + ',' + b + ')'; c.lineWidth = 4 * dpr;
+  c.beginPath(); c.arc(cx, cy, 9 * dpr, 0, 2 * Math.PI); c.fill(); c.stroke();
+
+  // Число под осью
+  c.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+  c.font = '700 ' + Math.round(R * 0.3) + 'px Unbounded, Onest, sans-serif';
+  c.textBaseline = 'top';
+  c.fillText(String(Math.round(S.gauge)), cx, cy + 20 * dpr);
+  c.fillStyle = '#94a3b8';
+  c.font = '500 ' + Math.round(14 * dpr) + 'px Onest, sans-serif';
+  c.fillText('слов/мин', cx, cy + 20 * dpr + R * 0.36);
+}
+
+/* ============ Главный цикл ============ */
+let lastUi = 0;
+function frame() {
+  requestAnimationFrame(frame);
+  const now = performance.now();
+  const el = elapsed();
+  if (S.status === 'running') {
+    if (S.mode === 'demo') demoTick(el);
+    if (S.status === 'running') silenceTick(el);
+  }
+  drawWave(now, S.status === 'finished' ? S.acc : el);
+  drawGauge();
+  if (now - lastUi > 120) {
+    lastUi = now;
+    updateTimerUI(el);
+    updateMetrics(el);
+  }
+}
+
+/* ============ Шпаргалка и суфлёр ============ */
+function buildScript() {
+  const toks = scriptArea.value.match(/\S+/g) || [];
+  prompter.innerHTML = '';
+  S.script = { cores: [], spans: [] };
+  S.ptr = 0; S.painted = 0; S.curEl = null;
+  if (!toks.length) {
+    prompter.innerHTML = '<p class="text-slate-500 text-xl">Текста пока нет. Добавьте его в режиме «Редактор».</p>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  toks.forEach(t => {
+    const sp = document.createElement('span');
+    sp.className = 'sw';
+    sp.textContent = t + ' ';
+    frag.appendChild(sp);
+    S.script.cores.push(norm(t));
+    S.script.spans.push(sp);
+  });
+  prompter.appendChild(frag);
+  paintScript();
+}
+
+function advanceScript(words) {
+  const sc = S.script;
+  if (!sc || !sc.cores.length) return;
+  for (const w of words) {
+    const c = norm(w);
+    if (c.length < 3) continue;
+    const lim = Math.min(sc.cores.length, S.ptr + 9);
+    for (let j = S.ptr; j < lim; j++) {
+      const s = sc.cores[j];
+      if (s === c || (s.length >= 5 && c.length >= 5 && s.slice(0, 5) === c.slice(0, 5))) { S.ptr = j + 1; break; }
+    }
+  }
+  paintScript();
+}
+
+function paintScript() {
+  const sc = S.script;
+  if (!sc || !sc.spans.length) return;
+  for (let k = S.painted; k < S.ptr && k < sc.spans.length; k++) sc.spans[k].classList.add('read');
+  if (S.curEl) S.curEl.classList.remove('cur');
+  const cur = sc.spans[S.ptr];
+  if (cur) {
+    cur.classList.add('cur');
+    S.curEl = cur;
+    prompter.scrollTo({ top: Math.max(0, cur.offsetTop - prompter.clientHeight * 0.4), behavior: 'smooth' });
+  } else { S.curEl = null; }
+  S.painted = S.ptr;
+}
+
+function updateScriptStats() {
+  const words = (scriptArea.value.match(/\S+/g) || []).filter(w => norm(w)).length;
+  const stats = $('#scriptStats'), fit = $('#scriptFit');
+  if (!words) { stats.textContent = 'Вставьте текст доклада'; fit.classList.add('hidden'); return; }
+  const sec = words / 130 * 60;
+  stats.innerHTML = 'Слов: <b>' + words + '</b> · чтение ≈ <b>' + mmss(sec) + '</b>';
+  const ratio = sec / S.target;
+  fit.classList.remove('hidden');
+  if (ratio > 1.05) { setTone(fit, 'red'); fit.textContent = 'Длиннее регламента на ' + mmss(sec - S.target); }
+  else if (ratio < 0.7) { setTone(fit, 'amber'); fit.textContent = 'Короче регламента на ' + mmss(S.target - sec); }
+  else { setTone(fit, 'green'); fit.textContent = 'Укладывается в ' + mmss(S.target); }
+}
+
+function setScriptView(view) {
+  const prompt = view === 'prompt';
+  if (prompt) buildScript();
+  scriptArea.classList.toggle('hidden', prompt);
+  prompter.classList.toggle('hidden', !prompt);
+  $('#viewEdit').setAttribute('aria-pressed', String(!prompt));
+  $('#viewPrompt').setAttribute('aria-pressed', String(prompt));
+  if (prompt) paintScript();
+}
+
+/* ============ Словарь паразитов ============ */
+function renderChips() {
+  const box = $('#chips');
+  box.innerHTML = '';
+  if (!S.dict.length) { box.innerHTML = '<p class="text-slate-500">Список пуст — добавьте слова ниже.</p>'; return; }
+  S.dict.forEach((w, idx) => {
+    const d = document.createElement('span');
+    d.className = 'chip';
+    d.appendChild(document.createTextNode(w));
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Убрать «' + w + '»');
+    b.innerHTML = '<i data-lucide="x" class="w-4 h-4"></i>';
+    b.addEventListener('click', () => { S.dict.splice(idx, 1); saveDict(); renderChips(); });
+    d.appendChild(b);
+    box.appendChild(d);
+  });
+  icons();
+}
+function saveDict() { store.set('speechRadar.dict', JSON.stringify(S.dict)); rebuildIndex(); }
+
+/* ============ Итоговый отчёт ============ */
+function computeReport() {
+  const el = S.acc;
+  const total = S.wordEvents.length;
+  const buckets = [];
+  const nB = Math.ceil(el / 10000);
+  for (let k = 0; k < nB; k++) {
+    const a = k * 10000, b = Math.min((k + 1) * 10000, el), L = b - a;
+    if (L < 3000) continue;
+    const last = k === nB - 1;
+    const n = S.wordEvents.filter(e => e.t >= a && (e.t < b || (last && e.t <= b))).length;
+    buckets.push({ label: last && L < 10000 ? fmtMs(el) : fmtMs(b), wpm: Math.round(n / (L / 60000)) });
+  }
+  const avg = Math.round(avgWpm());
+  const purity = purityPct();
+  const inRange = buckets.filter(b => b.wpm >= 95 && b.wpm <= 145).length;
+  const idealRatio = buckets.length ? inRange / buckets.length : 0;
+
+  let score = 0;
+  if (total > 0) {
+    const dist = avg < 95 ? 95 - avg : (avg > 145 ? avg - 145 : 0);
+    const avgFactor = clamp(1 - dist / 60, 0, 1);
+    const pace = 35 * (0.5 * avgFactor + 0.5 * idealRatio);
+    const clean = 35 * purity / 100;
+    const pauses = Math.max(0, 15 - 5 * S.pauses);
+    const ratio = el / (S.target * 1000);
+    let time;
+    if (ratio >= 0.8 && ratio <= 1.05) time = 15;
+    else if (ratio < 0.8) time = 15 * Math.max(0, 1 - (0.8 - ratio) / 0.6);
+    else time = 15 * Math.max(0, 1 - (ratio - 1.05) / 0.4);
+    score = Math.round(clamp(pace + clean + pauses + time, 0, 100));
+  }
+  return { el, total, buckets, avg, purity, score };
+}
+
+function buildTips(R) {
+  const tips = [];
+  const add = (tone, icon, title, text) => tips.push({ tone, icon, title, text });
+  const peak = R.buckets.reduce((m, b) => (!m || b.wpm > m.wpm ? b : m), null);
+  const low = R.buckets.filter(b => b.wpm > 0).reduce((m, b) => (!m || b.wpm < m.wpm ? b : m), null);
+  let paceTips = 0;
+
+  if (R.total === 0) {
+    add('red', 'mic-off', 'Речь не распознана', 'Проверьте, что микрофон разрешён в браузере и вы говорите достаточно громко. Для проверки интерфейса запустите демо-симуляцию.');
+    return tips;
+  }
+  if (R.avg > 150) {
+    add('red', 'zap', 'Слишком быстрый темп', 'Средняя скорость ' + R.avg + ' слов/мин' + (peak ? ', максимум на отметке ' + peak.label + ' — ' + peak.wpm : '') + '. Делайте вдох в конце каждой мысли и мысленно ставьте точку.');
+    paceTips++;
+  } else if (peak && peak.wpm > 150) {
+    add('amber', 'zap', 'Местами тараторите', 'На отметке ' + peak.label + ' темп вырос до ' + peak.wpm + ' слов/мин — слушатели не успевают записать. Замедляйтесь на ключевых выводах и цифрах.');
+    paceTips++;
+  }
+  if (R.avg > 0 && R.avg < 90) {
+    add('blue', 'hourglass', 'Темп ниже нормы', 'Средняя скорость ' + R.avg + ' слов/мин. Зал может заскучать: говорите бодрее и сокращайте вступления.');
+    paceTips++;
+  } else if (low && low.wpm < 90 && R.buckets.length >= 3) {
+    add('blue', 'hourglass', 'Просадка темпа', 'На отметке ' + low.label + ' скорость упала до ' + low.wpm + ' слов/мин. Если вы вспоминали текст — подготовьте опорные слова на слайдах.');
+    paceTips++;
+  }
+  if (!paceTips) add('green', 'check-circle-2', 'Темп в норме', 'Средняя скорость ' + R.avg + ' слов/мин — это комфортно для слушателей.');
+
+  if (S.parasites === 0) {
+    add('green', 'spell-check', 'Речь чистая', 'Ни одного слова-паразита из вашего списка. Так держать!');
+  } else {
+    const sorted = Array.from(S.counts.entries()).sort((a, b) => b[1] - a[1]);
+    const share = Math.round(S.parasites / R.total * 1000) / 10;
+    add(R.purity >= 75 ? 'amber' : 'red', 'ban', 'Слова-паразиты',
+      'Чаще всего звучало «' + sorted[0][0] + '» — ' + sorted[0][1] + ' ' + plural(sorted[0][1]) + '. Всего ' + S.parasites + ' (' + share + '% речи). Заменяйте их короткой паузой: она звучит увереннее.');
+  }
+
+  if (S.pauses > 0) {
+    const when = S.pauseEvents.slice(0, 3).map(t => fmtMs(t)).join(', ');
+    add(S.pauses > 1 ? 'red' : 'amber', 'hourglass', 'Долгие паузы: ' + S.pauses,
+      'Тишина дольше ' + (S.pauseThr / 1000).toFixed(1) + ' с была на отметках ' + when + '. Потеряли мысль — загляните в шпаргалку или повторите последнюю фразу.');
+  } else {
+    add('green', 'check-circle-2', 'Без провалов', 'Ни одной паузы дольше ' + (S.pauseThr / 1000).toFixed(1) + ' с — речь плавная.');
+  }
+
+  const ratio = R.el / (S.target * 1000);
+  if (ratio < 0.6) add('amber', 'timer', 'Короче регламента', 'Вы уложились в ' + fmtMs(R.el) + ' из ' + fmtMs(S.target * 1000) + '. Добавьте пример, демонстрацию или вывод.');
+  else if (ratio > 1.05) add('red', 'timer', 'Регламент превышен', 'Время вышло на ' + mmss((R.el - S.target * 1000) / 1000) + ' раньше, чем вы закончили. Сократите вступление.');
+  else add('green', 'timer', 'Уложились в регламент', 'Выступление заняло ' + fmtMs(R.el) + ' из ' + fmtMs(S.target * 1000) + '.');
+  return tips;
+}
+
+function verdictFor(score, total) {
+  if (total === 0) return 'Речь не распознана';
+  if (score >= 90) return 'Сцена ваша: уверенно и чисто';
+  if (score >= 75) return 'Сильное выступление с мелкими недочётами';
+  if (score >= 55) return 'Хорошая основа — доработайте темп и чистоту';
+  if (score >= 30) return 'Нужна ещё одна репетиция';
+  return 'Выступление пока сыро — тренируйтесь дальше';
+}
+
+function showReport() {
+  const R = computeReport();
+  const tone = R.total === 0 ? 'red' : (R.score >= 75 ? 'green' : (R.score >= 50 ? 'amber' : 'red'));
+  const sc = $('#scoreCard');
+  setTone(sc, tone);
+  const rgb = TONES[tone];
+  const col = 'rgb(' + rgb.join(',') + ')';
+  sc.style.setProperty('--c', col);
+  $('#verdict').textContent = verdictFor(R.score, R.total);
+
+  const chips = [
+    ['Средний темп', R.avg ? R.avg + ' сл/мин' : '—'],
+    ['Чистота', R.purity + '%'],
+    ['Паразиты', String(S.parasites)],
+    ['Паузы', String(S.pauses)],
+    ['Время', fmtMs(R.el)]
+  ];
+  $('#scoreChips').innerHTML = chips.map(c => '<span class="badge tone-idle" style="color:#e2e8f0">' + esc(c[0]) + ': <b>' + esc(c[1]) + '</b></span>').join('');
+
+  $('#tips').innerHTML = buildTips(R).map(t =>
+    '<div class="tip tone-' + t.tone + '"><i data-lucide="' + t.icon + '" class="w-6 h-6 mt-0.5"></i><div><h4 class="text-lg">' + esc(t.title) + '</h4><p class="text-slate-300 text-lg leading-snug">' + esc(t.text) + '</p></div></div>'
+  ).join('');
+
+  const sorted = Array.from(S.counts.entries()).sort((a, b) => b[1] - a[1]);
+  const maxN = sorted.length ? sorted[0][1] : 1;
+  $('#topPara').innerHTML = sorted.length
+    ? sorted.map(([w, n]) => '<div><div class="flex justify-between text-lg mb-1.5"><span class="font-semibold">«' + esc(w) + '»</span><span class="text-rose-300 font-bold">×' + n + '</span></div><div class="bar-track"><div class="bar-fill" data-w="' + Math.round(n / maxN * 100) + '"></div></div></div>').join('')
+    : '<p class="text-emerald-300 text-xl">Слов-паразитов не найдено. Речь чистая!</p>';
+
+  $('#reportText').innerHTML = S.chunks.length ? S.chunks.join(' ') : '<span class="text-slate-500">Текст не распознан.</span>';
+
+  $('#report').classList.remove('hidden');
+  $('#report').scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+  icons();
+
+  // Анимации после показа
+  const ring = $('#ringFg');
+  ring.setAttribute('stroke', col);
+  ring.style.strokeDashoffset = '427.26';
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    ring.style.strokeDashoffset = String(427.26 * (1 - R.score / 100));
+    $$('.bar-fill').forEach(b => { b.style.width = b.dataset.w + '%'; });
+  }));
+  const num = $('#scoreNum');
+  const t0 = performance.now();
+  const countUp = now => {
+    const p = clamp((now - t0) / 1200, 0, 1);
+    num.textContent = String(Math.round(R.score * (1 - Math.pow(1 - p, 3))));
+    if (p < 1) requestAnimationFrame(countUp);
+  };
+  requestAnimationFrame(countUp);
+
+  drawChart(R.buckets);
+}
+
+function drawChart(buckets) {
+  if (S.chart) { S.chart.destroy(); S.chart = null; }
+  const canvas = $('#chartCanvas'), empty = $('#chartEmpty');
+  if (!window.Chart) { canvas.parentElement.classList.add('hidden'); empty.classList.remove('hidden'); empty.textContent = 'Не удалось загрузить Chart.js — проверьте интернет-соединение.'; return; }
+  if (!buckets.length) { canvas.parentElement.classList.add('hidden'); empty.classList.remove('hidden'); empty.textContent = 'Выступление слишком короткое для графика — говорите дольше 3 секунд.'; return; }
+  canvas.parentElement.classList.remove('hidden'); empty.classList.add('hidden');
+
+  Chart.defaults.font.family = 'Onest, sans-serif';
+  Chart.defaults.font.size = 14;
+  const colorFor = v => v < 90 ? '#38bdf8' : (v < 95 || (v > 145 && v <= 150) ? '#fbbf24' : (v <= 145 ? '#34d399' : '#fb7185'));
+  const labels = buckets.map(b => b.label);
+  const data = buckets.map(b => b.wpm);
+  const maxV = Math.max(200, Math.max.apply(null, data) + 20);
+
+  S.chart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Нижняя граница', data: labels.map(() => 95), borderColor: 'rgba(52,211,153,.4)', borderDash: [6, 6], borderWidth: 1, pointRadius: 0, fill: false },
+        { label: 'Идеальная зона 95–145', data: labels.map(() => 145), borderColor: 'rgba(52,211,153,.4)', borderDash: [6, 6], borderWidth: 1, pointRadius: 0, fill: '-1', backgroundColor: 'rgba(52,211,153,.12)' },
+        {
+          label: 'Темп речи, слов/мин', data, borderColor: '#34d399', borderWidth: 4, tension: 0.35,
+          pointRadius: 8, pointHoverRadius: 10, pointBackgroundColor: data.map(colorFor), pointBorderColor: '#0f172a', pointBorderWidth: 3,
+          segment: { borderColor: ctx => colorFor(ctx.p1.parsed.y) }
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 1000 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#cbd5e1', filter: item => item.datasetIndex !== 0 } },
+        tooltip: { filter: item => item.datasetIndex === 2, callbacks: { label: c => ' ' + c.parsed.y + ' слов/мин' } }
+      },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,.08)' }, title: { display: true, text: 'Время выступления', color: '#94a3b8' } },
+        y: { min: 0, suggestedMax: maxV, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,.1)' }, title: { display: true, text: 'слов в минуту', color: '#94a3b8' } }
+      }
+    }
+  });
+}
+
+function hideReport() {
+  $('#report').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+/* ============ События ============ */
+btnStart.addEventListener('click', toggleMain);
+btnFinish.addEventListener('click', finishSession);
+btnReset.addEventListener('click', () => { resetAll(); toast('Сессия сброшена', 'blue'); });
+
+modeLive.addEventListener('click', () => {
+  if (S.mode === 'live') return;
+  resetAll(); hideNotice(); setMode('live');
+});
+modeDemo.addEventListener('click', () => {
+  if (S.mode === 'demo' && S.status === 'running') return;
+  if (S.mode === 'demo' && S.status === 'paused') { resumeSession(); return; }
+  launchDemo();
+});
+
+$('#noticeDemo').addEventListener('click', launchDemo);
+$('#noticeClose').addEventListener('click', hideNotice);
+$('#reportBack').addEventListener('click', hideReport);
+$('#reportNew').addEventListener('click', () => { resetAll(); });
+
+$$('#targetSeg button').forEach(b => b.addEventListener('click', () => {
+  S.target = Number(b.dataset.sec);
+  S.overNotified = false;
+  $$('#targetSeg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  updateScriptStats();
+}));
+
+$$('.tab').forEach(t => t.addEventListener('click', () => {
+  $$('.tab').forEach(x => x.setAttribute('aria-selected', String(x === t)));
+  ['live', 'dict', 'script'].forEach(n => $('#panel-' + n).classList.toggle('hidden', n !== t.dataset.tab));
+  if (t.dataset.tab === 'live') scrollTranscript();
+}));
+
+$('#addForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const inp = $('#addInput');
+  const v = inp.value.toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+  if (!v) return;
+  if (S.dict.includes(v)) { toast('Такое слово уже есть', 'amber'); return; }
+  S.dict.push(v); saveDict(); renderChips();
+  inp.value = '';
+  toast('Добавлено: «' + v + '»', 'green');
+});
+$('#dictReset').addEventListener('click', () => { S.dict = DEFAULT_WORDS.slice(); saveDict(); renderChips(); toast('Список по умолчанию восстановлен', 'blue'); });
+
+$('#pauseRange').addEventListener('input', e => {
+  S.pauseThr = Number(e.target.value) * 1000;
+  $('#pauseRangeVal').textContent = Number(e.target.value).toFixed(1) + ' с';
+});
+
+scriptArea.addEventListener('input', () => { updateScriptStats(); buildScript(); });
+$('#viewEdit').addEventListener('click', () => setScriptView('edit'));
+$('#viewPrompt').addEventListener('click', () => setScriptView('prompt'));
+$('#scriptSample').addEventListener('click', () => { scriptArea.value = DEMO_SCRIPT; updateScriptStats(); buildScript(); });
+$('#scriptClear').addEventListener('click', () => { scriptArea.value = ''; updateScriptStats(); buildScript(); });
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('#report').classList.contains('hidden')) { hideReport(); return; }
+  const tag = (e.target.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'd' || e.key === 'D' || e.key === 'в' || e.key === 'В') { e.preventDefault(); launchDemo(); }
+  else if (e.code === 'Space') { e.preventDefault(); toggleMain(); }
+});
+
+window.addEventListener('beforeunload', () => { teardownLive(); stopAudio(); });
+
+/* ============ Инициализация ============ */
+function init() {
+  rebuildIndex();
+  renderChips();
+  updateScriptStats();
+  buildScript();
+  updateButtons();
+  icons();
+  if (!SR) showNotice('unsupported');
+  requestAnimationFrame(frame);
+}
+init();
+
+})();
+</script>
+</body>
+</html>
